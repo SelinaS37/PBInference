@@ -1,0 +1,289 @@
+---
+title: "Real Data"
+author: "Jianhui Gao"
+date: "2025-05-25"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+library(dplyr)
+library(kableExtra)
+library(ipd)
+source("/Users/jianhuigao/Documents/GitHub/PBInference/RealData/chenchen.R")
+source("/Users/jianhuigao/Documents/GitHub/PBInference/RealData/INT.R")
+
+# DEXA
+dexa <- read.table("/Users/jianhuigao/Library/CloudStorage/OneDrive-UniversityofToronto/Desktop/SyntheticSurrogateAnalysis/Data/DEXA.tab", header = TRUE)
+ancestry <- read.table("/Users/jianhuigao/Library/CloudStorage/OneDrive-UniversityofToronto/Desktop/SyntheticSurrogateAnalysis/Data/Subpopulation.tab", header = TRUE)
+dexa <- dexa %>% left_join(ancestry)
+dexa$f.23248.2.0 <- dexa$f.23248.2.0 / 1000
+
+dat <- readRDS('/Users/jianhuigao/Downloads/jianhui_data 2/full_data.rds')
+dat <- as.data.frame(dat)
+colnames(dat) <- c("f.eid", "BMD", "PA", "age", "smoke", "drink", "driving", "computer", "tv", "sex")
+dat <- dat[!dat$smoke == -3,]
+dat <- dat[!dat$drink == -3,]
+dat <- dat[!dat$driving == -3 & !dat$driving == -1,]
+dat$driving[dat$driving == -10] <- 0.5
+dat <- dat[!dat$computer == -3 & !dat$computer == -1,]
+dat$computer[dat$computer == -10] <- 0.5
+dat <- dat[!dat$tv == -3 & !dat$tv == -1,]
+dat$tv[dat$tv == -10] <- 0.5
+dat$SB <- dat$driving + dat$computer + dat$tv
+dat$PA <- factor(dat$PA)
+
+dexa <- dexa %>% left_join(dat, by = c("f.eid" = "f.eid"))
+
+pheno_id <- "f.23248.2.0" 
+cov_id <- c("f.21022.0.0", "f.22001.0.0", "f.23104.0.0", "PA", "smoke", "SB", "drink", "f.50.0.0", "f.23107.0.0", "f.23108.0.0")
+```
+
+# Strong Prediction
+
+```{r}
+model <- c("strong")
+if(model == "strong"){
+  W <- NULL
+} else {
+  W <- c("f.21022.0.0", "f.22001.0.0", "f.23104.0.0") # age, sex, BMI
+}
+
+ancestry_id <- c(3, 3001, 3002, 3003)
+
+# South Asian subpopulation
+test <- dexa %>%
+  filter(f.21000.0.0 %in% ancestry_id) %>% 
+  select(all_of(c(pheno_id, cov_id))) %>% 
+  tidyr::drop_na(all_of(cov_id))
+
+train <- dexa %>%
+  filter(f.21000.0.0 %in% c(1, 1001, 1002, 1003)) %>%
+  filter(!is.na(f.23248.2.0)) %>% 
+  select(all_of(c(pheno_id, cov_id))) %>% 
+  tidyr::drop_na(all_of(cov_id)) %>%
+  select(-W)
+
+# Train the model
+set.seed(1234)
+model <- ranger::ranger(f.23248.2.0 ~ ., data = train, num.trees = 1000)
+
+train$yhat <- predict(model, train)$predictions
+
+
+test$yhat <- predict(model, test)$predictions
+
+
+# Inverse normal transformation
+test <- INT(test, "f.23248.2.0")
+test <- INT(test, "yhat")
+
+test$f.23248.2.0 <- test$f.23248.2.0_int
+test$yhat <- test$yhat_int
+
+test$set_label <- ifelse(is.na(test$f.23248.2.0), "unlabeled", "labeled")
+
+formula <- f.23248.2.0 - yhat ~   f.21022.0.0 + f.22001.0.0 + f.23104.0.0
+
+ppi <- ipd(formula, method = "ppi", model = "ols", data = test, label = "set_label") 
+
+
+fake_dat <- test %>% filter(set_label == "labeled") %>% mutate(set_label = "unlabeled")
+ppia <- ipd(formula, method = "ppi", model = "ols", data = rbind(test, fake_dat), label = "set_label")
+
+
+cc <- chen_chen(Y = test %>% filter(set_label == "labeled") %>% pull(f.23248.2.0),
+                Xlab = test %>% filter(set_label == "labeled") %>% select(f.21022.0.0, f.22001.0.0, f.23104.0.0),
+                flab = test %>% filter(set_label == "labeled") %>% pull(yhat),
+                fall = test %>% pull(yhat),
+                Xall = test %>% select(f.21022.0.0, f.22001.0.0, f.23104.0.0))
+
+
+pspa <- ipd(formula, method = "pspa", model = "ols", data = test, label = "set_label")
+
+
+ppiplus <- ipd(formula, method = "ppi_plusplus", model = "ols", data = test, label = "set_label")
+
+std <- lm(f.23248.2.0 ~   f.21022.0.0 + f.22001.0.0 + f.23104.0.0, data = test)
+
+
+
+result <- c()
+result <- rbind(result, t(summary(std)$coefficients[, c("Estimate", "Std. Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(ppi)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(ppia)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(pspa)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(ppiplus)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(cc))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+
+rownames(result) <- rep(c("Estimate", "SE", "RE"), 6)
+
+result <- as.data.frame(result) %>% tibble::rownames_to_column("rowname")
+result$rowname <- rep(c("Estimate", "SE", "RE"), 6)
+
+result <- result %>%
+  mutate(
+    across(
+      where(is.numeric), 
+      ~ case_when(
+        rowname == "Estimate" ~ formatC(., format = "f", digits = 3),
+        rowname == "SE" ~ formatC(., format = "f", digits = 4),
+        rowname == "RE" ~ formatC(., format = "f", digits = 2),
+        TRUE ~ as.character(.)
+      )
+    )
+  )
+
+result %>%
+  kable(
+    col.names = c("","Intercept", "Age", "Sex", "BMI"),
+    align = "c", 
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    "striped", 
+    full_width = FALSE, 
+    latex_options = c("hold_position")
+  ) %>%
+  group_rows("OLS", 1, 3) %>%
+  group_rows("PPI", 4, 6) %>%
+  group_rows("PPI_a", 7, 9) %>%
+  group_rows("PSPA", 10, 12) %>%
+  group_rows("PPI++", 13, 15) %>%
+  group_rows("CC", 16, 18)
+  
+```
+
+\newpage
+\clearpage
+
+# Weak Prediction
+
+```{r}
+model <- c("weak")
+if(model == "strong"){
+  W <- NULL
+} else {
+  W <- c("f.21022.0.0", "f.22001.0.0", "f.23104.0.0") # age, sex, BMI
+}
+
+ancestry_id <- c(3, 3001, 3002, 3003)
+
+# South Asian subpopulation
+test <- dexa %>%
+  filter(f.21000.0.0 %in% ancestry_id) %>% 
+  select(all_of(c(pheno_id, cov_id))) %>% 
+  tidyr::drop_na(all_of(cov_id))
+
+train <- dexa %>%
+  filter(f.21000.0.0 %in% c(1, 1001, 1002, 1003)) %>%
+  filter(!is.na(f.23248.2.0)) %>% 
+  select(all_of(c(pheno_id, cov_id))) %>% 
+  tidyr::drop_na(all_of(cov_id)) %>%
+  select(-W)
+
+# Train the model
+set.seed(1234)
+model <- ranger::ranger(f.23248.2.0 ~ ., data = train, num.trees = 1000)
+
+train$yhat <- predict(model, train)$predictions
+
+
+test$yhat <- predict(model, test)$predictions
+
+
+# Inverse normal transformation
+test <- INT(test, "f.23248.2.0")
+test <- INT(test, "yhat")
+
+test$f.23248.2.0 <- test$f.23248.2.0_int
+test$yhat <- test$yhat_int
+
+test$set_label <- ifelse(is.na(test$f.23248.2.0), "unlabeled", "labeled")
+
+formula <- f.23248.2.0 - yhat ~   f.21022.0.0 + f.22001.0.0 + f.23104.0.0
+
+ppi <- ipd(formula, method = "ppi", model = "ols", data = test, label = "set_label") 
+
+
+fake_dat <- test %>% filter(set_label == "labeled") %>% mutate(set_label = "unlabeled")
+ppia <- ipd(formula, method = "ppi", model = "ols", data = rbind(test, fake_dat), label = "set_label")
+
+
+cc <- chen_chen(Y = test %>% filter(set_label == "labeled") %>% pull(f.23248.2.0),
+                Xlab = test %>% filter(set_label == "labeled") %>% select(f.21022.0.0, f.22001.0.0, f.23104.0.0),
+                flab = test %>% filter(set_label == "labeled") %>% pull(yhat),
+                fall = test %>% pull(yhat),
+                Xall = test %>% select(f.21022.0.0, f.22001.0.0, f.23104.0.0))
+
+
+pspa <- ipd(formula, method = "pspa", model = "ols", data = test, label = "set_label")
+
+
+ppiplus <- ipd(formula, method = "ppi_plusplus", model = "ols", data = test, label = "set_label")
+
+std <- lm(f.23248.2.0 ~   f.21022.0.0 + f.22001.0.0 + f.23104.0.0, data = test)
+
+
+
+result <- c()
+result <- rbind(result, t(summary(std)$coefficients[, c("Estimate", "Std. Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(ppi)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(ppia)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(pspa)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(summary(ppiplus)$coefficients[, c("Estimate", "Std.Error")]))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+result <- rbind(result, t(cc))
+result <- rbind(result, (result[2,]/result[nrow(result),])^2)
+
+rownames(result) <- rep(c("Estimate", "SE", "RE"), 6)
+
+result <- as.data.frame(result) %>% tibble::rownames_to_column("rowname")
+result$rowname <- rep(c("Estimate", "SE", "RE"), 6)
+
+result <- result %>%
+  mutate(
+    across(
+      where(is.numeric), 
+      ~ case_when(
+        rowname == "Estimate" ~ formatC(., format = "f", digits = 3),
+        rowname == "SE" ~ formatC(., format = "f", digits = 4),
+        rowname == "RE" ~ formatC(., format = "f", digits = 2),
+        TRUE ~ as.character(.)
+      )
+    )
+  )
+
+result %>%
+  kable(
+    col.names = c("","Intercept", "Age", "Sex", "BMI"),
+    align = "c", 
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    "striped", 
+    full_width = FALSE, 
+    latex_options = c("hold_position")
+  ) %>%
+  group_rows("OLS", 1, 3) %>%
+  group_rows("PPI", 4, 6) %>%
+  group_rows("PPI_a", 7, 9) %>%
+  group_rows("PSPA", 10, 12) %>%
+  group_rows("PPI++", 13, 15) %>%
+  group_rows("CC", 16, 18)
+  
+```

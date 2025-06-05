@@ -15,10 +15,10 @@ chen_chen <- function(Y, Xlab, flab, fall, Xall) {
   
   # Add intercept for labeled covariates
   Xlab_int <- cbind(1, as.matrix(Xlab))
+  Xall_int <- cbind(1, as.matrix(Xall))
   
   # Compute derivative matrices
-  D1 <- D2 <- -crossprod(Xlab_int, Xlab_int) / n_labeled
-  #D2 <- -crossprod(Xlab_int, Xlab_int) / n_labeled
+  D1 <- D2 <- -crossprod(Xall_int, Xall_int) / n_total
   
   # Compute score matrices
   score_beta <- Xlab_int * residuals(beta_model)
