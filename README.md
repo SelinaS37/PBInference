@@ -10,7 +10,7 @@ Our paper investigates the statistical efficiency of prediction-based (PB) infer
 The repository includes:
 - Implementation of PB inference methods discussed in the paper.
 - Simulations and analyses used to generate the results in the paper.
-- Code for reproduce our UK Biobank Analysis, but access to UK Biobank is required as the data cannot be released.
+- Code to reproduce our UK Biobank Analysis. [Note: access to UK Biobank is required as the data cannot be publicly released.]
 
 The simulation evaluates the performance of several methods implemented with the [`ipd`](https://ipd-tools.github.io/ipd/) package, including:
 
@@ -103,7 +103,7 @@ You should expect the following results by running the above code:
 
 ## Acknowledgments
 
-This work builds on the work of [Angelopoulos et al. (2023)](https://www.science.org/doi/10.1126/science.adi6000), [Chen and Chen (2000)](https://www.jstor.org/stable/2680690), and [Motwani and Witten (2023)](https://www.jmlr.org/papers/volume24/23-0896/23-0896.pdf), with implementation support from the [ipd](https://ipd-tools.github.io/ipd/) package.
+This project builds on the work of [Angelopoulos et al. (2023)](https://www.science.org/doi/10.1126/science.adi6000), [Chen and Chen (2000)](https://www.jstor.org/stable/2680690), and [Motwani and Witten (2023)](https://www.jmlr.org/papers/volume24/23-0896/23-0896.pdf), with implementation support from the [ipd](https://ipd-tools.github.io/ipd/) package.
 
 ## Contact
 
