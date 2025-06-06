@@ -1,8 +1,10 @@
 
+# ----------------------------- Data Generation ------------------------------#
 
-# Calculate the true value of y
-true_y <- function(df, 
-                   sce) {
+
+
+# Generate true y and prediction functions along with correlations
+true_y <- function(df, sce) {
   
   if (sce == "1a") {
     
@@ -28,11 +30,13 @@ true_y <- function(df,
   }
   
   return(df$y)
+  
 }
 
-# Fit the prediction model to generate yhat
-prediction_model <- function(train_data, 
-                             sce) {
+
+
+# Train prediction model under each scenario
+prediction_model <- function(train_data, sce) {
   
   if (sce == "1a") {
     
@@ -40,7 +44,7 @@ prediction_model <- function(train_data,
     
   } else if (sce == "1b") {
     
-    pred_model <- lm(y ~ x1 + X6 + x1 * x6, data = train_data)
+    pred_model <- lm(y ~ x1 + x6 + x1 * x6, data = train_data)
     
   } else if (sce == "2a") {
     
@@ -60,17 +64,26 @@ prediction_model <- function(train_data,
   return(pred_model)
 }
 
-# Generate the data for simulation
-data_gen <- function(n_train, 
-                     n_test, 
-                     n_val, 
-                     sce,
-                     n_cores = 1,
-                     n_sim = 1) {
+
+
+# Determine the correlation in each scenario
+scenario_correlation <- function(sce) {
+  
+  correlation = 0.4
+  
+  return(correlation)
+}
+
+
+
+
+# Generate data for training prediction model
+data_gen_train <- function(n_train, sce) {
   
   # Set up mu and sigma
-  covariance <- 0.4
-  sigma <- matrix(covariance, nrow = 11, ncol = 11)
+  correlation <- scenario_correlation(sce)
+  
+  sigma <- matrix(correlation, nrow = 11, ncol = 11)
   diag(sigma) <- 1
   mu <- rep(0, 11)
   
@@ -87,57 +100,49 @@ data_gen <- function(n_train,
   
   train_data$y <- true_y(train_data, sce)
   
-  # Set the model for generating true y
+  # Obtain the prediction model
   pred_model <- prediction_model(train_data, sce)
   
-  # Generate test and validation data
-  generate_sim_data <- function(i) {
-    n <- n_test + n_val
-    
-    # Generate test and validation data
-    data <- as.data.frame(MASS::mvrnorm(n, mu = mu, Sigma = sigma))
-    
-    data <- data %>%
-      rename_with(~ paste0("x", 1:11)) %>%
-      mutate(
-        e_g = rnorm(n, mean = 0, sd = 1),
-        set = rep(c("testing", "validation"), c(n_test, n_val)),
-        sim = i
-      )
-    
-    data$y <- true_y(data, sce)
-    
-    # Generate prediction
-    pred <- predict(pred_model, data)
-    data$pred <- pred
-    
-    # Calculate R2
-    SST <- sum((data$y - mean(data$y))^2)
-    SSR <- sum((data$y - pred)^2)
-    data$R2 <- 1 - (SSR / SST)
-    
-    return(data)
-  }
-  
-  # Run the function in parallel
-  sim_dat_list <- mclapply(1:n_sim, generate_sim_data, mc.cores = n_cores)
-  
-  # Combine the list of data frames into a single data frame
-  test_val_data <- do.call(rbind, sim_dat_list)
-  
-  return(test_val_data)
+  return(pred_model)
 }
 
 
 
-
-
-
-
-
-
-
-
+# Generate labelled and unlabelled data
+data_gen_testval <- function(n_tot, pred_model, sce) {
+  
+  # Set up mu and sigma
+  correlation <- scenario_correlation(sce)
+  
+  sigma <- matrix(correlation, nrow = 11, ncol = 11)
+  diag(sigma) <- 1
+  mu <- rep(0, 11)
+  
+  n <- n_tot
+  
+  # Generate test and validation data
+  data <- as.data.frame(MASS::mvrnorm(n, mu = mu, Sigma = sigma))
+  
+  data <- data %>%
+    rename_with(~ paste0("x", 1:11)) %>%
+    mutate(
+      e_g = rnorm(n, mean = 0, sd = 1)
+      #set = rep(c("testing", "validation"), c(n_test, n_val))
+    )
+  
+  data$y <- true_y(data, sce)
+  
+  # Generate prediction
+  pred <- predict(pred_model, data)
+  data$pred <- pred
+  
+  # Calculate R2
+  SST <- sum((data$y - mean(data$y))^2)
+  SSR <- sum((data$y - pred)^2)
+  data$R2 <- 1 - (SSR / SST)
+  
+  return(data)
+}
 
 
 
