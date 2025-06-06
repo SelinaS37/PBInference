@@ -22,6 +22,8 @@ The simulation evaluates the performance of several methods implemented with the
 
 ## Repository Structure
 
+Within the Scripts folder:
+
 * `run_simulation.R`: Script for running simulations
 * `data_generation.R`: Contains functions for data generation
 * `method_functions.R`: Contains functions for the methods 
@@ -80,7 +82,6 @@ method_dfs <- rbind(
   pspa(sim_dat_tv, formula)
 )
 
-method_dfs$R2 = mean(sim_dat_tv$R2)
 
 ```
 You should expect the following results by running the above code:
