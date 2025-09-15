@@ -263,6 +263,8 @@ chen_chen <- function(sim_dat_tv, formula, family = "gaussian") {
   
   se_beta_bar <- sqrt(diag(Omega))
   
+  # Get the scores
+  
   # Output
   terms <- rhs_vars
   df <- data.frame(
@@ -276,7 +278,7 @@ chen_chen <- function(sim_dat_tv, formula, family = "gaussian") {
       Upper.CI = Estimate + 1.96 * Std.Error
     ) %>%
     select(Estimate, Std.Error, Lower.CI, Upper.CI, Method, term)
-  
+    
   return(df)
 }
 
@@ -320,4 +322,5 @@ pspa <- function(sim_dat_tv, formula){
   
   return(df)
 }
+
 
